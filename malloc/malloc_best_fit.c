@@ -77,20 +77,24 @@ void my_initialize() {
 void *my_malloc(size_t size) {
   my_metadata_t *metadata = my_heap.free_head;
   my_metadata_t *prev = NULL;
-  // First-fit: Find the first free slot the object fits.
-  // TODO: Update this logic to Best-fit!
-  while (metadata && metadata->size < size) {
+  // Best-fit: Find the smallest free slot the object fits.
+  my_metadata_t *smallest_matadata = NULL;
+  my_metadata_t *smallest_prev = NULL;
+  while (metadata) {
+    if (metadata->size >= size &&
+        (smallest_matadata == NULL || smallest_matadata->size > metadata->size)) {
+      smallest_matadata = metadata;
+      smallest_prev = prev;
+    }
     prev = metadata;
     metadata = metadata->next;
   }
-  // now, metadata points to the first free slot
-  // and prev is the previous entry.
 
-  if (!metadata) {
+  if (!smallest_matadata) {
     // There was no free slot available. We need to request a new memory region
     // from the system by calling mmap_from_system().
     //
-    //     | metadata | free slot |
+    //     | smallest_matadata | free slot |
     //     ^
     //     metadata
     //     <---------------------->
@@ -102,18 +106,19 @@ void *my_malloc(size_t size) {
     // Add the memory region to the free list.
     my_add_to_free_list(metadata);
     // Now, try my_malloc() again. This should succeed.
+    // TODO: ここを smallest = heap.free_heap にしたらより速そう
     return my_malloc(size);
   }
 
   // |ptr| is the beginning of the allocated object.
   //
-  // ... | metadata | object | ...
+  // ... | smallest_matadata | object | ...
   //     ^          ^
   //     metadata   ptr
-  void *ptr = metadata + 1;
-  size_t remaining_size = metadata->size - size;
+  void *ptr = smallest_matadata + 1;
+  size_t remaining_size = smallest_matadata->size - size;
   // Remove the free slot from the free list.
-  my_remove_from_free_list(metadata, prev);
+  my_remove_from_free_list(smallest_matadata, smallest_prev);
 
   if (remaining_size > sizeof(my_metadata_t)) {
     // Shrink the metadata for the allocated object
@@ -121,10 +126,10 @@ void *my_malloc(size_t size) {
     // If the remaining_size is not large enough to make a new metadata,
     // this code path will not be taken and the region will be managed
     // as a part of the allocated object.
-    metadata->size = size;
+    smallest_matadata->size = size;
     // Create a new metadata for the remaining free slot.
     //
-    // ... | metadata | object | metadata | free slot | ...
+    // ... | smallest_matadata | object | metadata | free slot | ...
     //     ^          ^        ^
     //     metadata   ptr      new_metadata
     //                 <------><---------------------->
