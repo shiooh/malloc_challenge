@@ -57,13 +57,47 @@ if((uintptr_t)metadata % 4096 == 0 && metadata->size + sizeof(my_metadata_t) == 
 
 | Time1<br>[ms] | Utilization1<br>[%] | Time2<br>[ms] | Utilization2<br>[%] | Time3<br>[ms] | Utilization3<br>[%] | Time4<br>[ms] | Utilization4<br>[%] | Time5<br>[ms] | Utilization5<br>[%] |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 651 | 70 | 382 | 39 | 330 | 51 | 891 | 78 | 643 | 77 |
+| 620 | 70 | 362 | 39 | 342 | 51 | 774 | 79 | 682 | 78 |
 
 Utilization はわずかに、実行時間は全体的にそこそこ向上したが、challenge 4 では実行時間が悪化してしまった。
 
 右側の領域のメタデータが空き領域か判断するのに free_head_list をすべて精査するのがオーバーヘッドになるので、メタデータが空き領域を指しているか否かの情報を追加し、また free_head_list から削除するために、prev_metadata を素早く得たいので、双方向リストにするなどの工夫の余地が残る。
 
-(メタデータが空き領域でない⇔ `metadata->next = NULL` で十分と考えたが、これではうまくいかなかった)
+
+## 発展課題
+ソースコード：[malloc/malloc_merge_to_both_side.c](./malloc/malloc_merge_to_both_side.c)
+
+上記の考察を踏まえ、 metadata のメンバー is_free を作り、メタデータが空き領域か簡単に判定できるようにした。
+is_free の更新は、バグを防ぐために free_list を更新する Helper 関数内だけで行うようにした。
+
+また、空き領域, 使用中領域を合わせたすべての領域をアドレス順に並べた双方向リスト neighbour を作成した。そうすると、右領域の計算が簡単になる上、左領域も free_head_list をすべて精査することなく O(1) で得られるようになった。
+
+これらを用いて、右領域と左領域両方について、空き領域が隣接していたら結合する仕組みを作った。
+
+ただし、それぞれの結合では metadata の free_list 上での prev ポインタを計算する my_find_prev_metadata() を呼び出している。
+この関数は最悪 O(N) ,(Nは領域の数) の計算量がかかるので、これがボトルネックになっている。
+
+free_head_list も双方向リストにすると解決できそうだが、まだ実装できていない。
+
+適用した結果は以下の通り。
+| Time1<br>[ms] | Utilization1<br>[%] | Time2<br>[ms] | Utilization2<br>[%] | Time3<br>[ms] | Utilization3<br>[%] | Time4<br>[ms] | Utilization4<br>[%] | Time5<br>[ms] | Utilization5<br>[%] |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 180 | 60 | 82 | 22 | 55 | 33 | 75 | 84 | 78 | 80 |
+
+実行時間がけた違いに短くなり、計算量を減らせていることが確認できる。
+
+また、データ数, データサイズが大きい後半のチャレンジでは、Utilization が今までで最も良くなっており、領域結合のメリットが発揮できていることが確認できる。
+
+ただし、前半のチャレンジでは Utilization が悪化している。これは、メンバを追加したことで構造体 my_metadata_t のサイズが大きくなり、純粋な空き領域が圧迫されたことが原因だと予想する。
+
+## まとめ
+| Name | Time1<br>[ms] | Utilization1<br>[%] | Time2<br>[ms] | Utilization2<br>[%] | Time3<br>[ms] | Utilization3<br>[%] | Time4<br>[ms] | Utilization4<br>[%] | Time5<br>[ms] | Utilization5<br>[%] |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| simple | 8 | 70 | 7 | 39 | 73 | 8 | 5393 | 15 | 3634 | 15 |
+| best_fit | 999 | 70 | 406 | 39 | 618 | 51 | 5853 | 72 | 4156 | 72 |
+| first_list_bit | 964 | 70 | 398 | 39 | 595 | 51 | 207 | 72 | 927 | 72 |
+| merge_to_right | 620 | 70 | 362 | 39 | 342 | 51 | 774 | 79 | 682 | 78 |
+| merge_to_bothside | 180 | 60 | 82 | 22 | 55 | 33 | 75 | 84 | 78 | 80 |
 
 
 # (original)
