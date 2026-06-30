@@ -170,6 +170,9 @@ void *my_malloc(size_t size) {
 // metadata の右隣の領域が空き領域だったら結合（右隣の領域を削除して metadata->size を拡大）する。
 void my_joint_to_right(my_metadata_t *metadata, void *ptr){
   my_metadata_t *right_metadata = (my_metadata_t *)((char *)ptr + metadata->size);
+  if((uintptr_t)right_metadata % 4096 == 0){
+    return;
+  }
 
   for(int i=0; i < my_heap.free_head_list_size; ++i){
     my_metadata_t *candidate = my_heap.free_head_list[i];
