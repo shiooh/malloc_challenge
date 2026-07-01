@@ -65,7 +65,7 @@ void my_initialize_free_list(){
 
 // 指定のサイズの free list を担当している my_heap.free_head_list のインデックスを返す
 int my_find_list_index(size_t size){
-  const size_t bin_range = 200;   // MAGIC: 1つの bin が担当する size の範囲
+  const size_t bin_range = 100;   // MAGIC: 1つの bin が担当する size の範囲
   for(int i=0; i < my_heap.free_head_list_size; ++i){
     if(i*bin_range <= size && size < (i+1)*bin_range)return i;
   }
@@ -108,6 +108,7 @@ my_metadata_t *my_find_prev_metadata(my_metadata_t *metadata){
 //
 // ------------------- 双方向リスト neighbour の更新 ------------------ //
 // ---- 空き領域, 使用中領域を合わせたすべての領域をアドレス順に並べる ---- //
+// -- 新たに map した領域は先頭に加えるが, これは隣接しているとは限らない - //
 // ---------- 必ず neighbour_head から始まり, dummy で終わる ----------- //
 //
 
